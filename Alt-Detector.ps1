@@ -36,6 +36,7 @@ if (Test-Path $hwidDatabase) {
     try {
         $databaseContent = Get-Content $hwidDatabase -Raw
         $hwidAltDatabase = $databaseContent | ConvertFrom-Json
+        if ($hwidAltDatabase -eq $null) { $hwidAltDatabase = @{} }
     } catch { $hwidAltDatabase = @{} }
 }
 
@@ -90,14 +91,22 @@ if ($uniqueFoundAlts.Count -gt 0) {
     $encrypted = [System.Convert]::ToBase64String($bytes)
     Set-Content -Path $hwidFile -Value $encrypted -Force
     
-    if ($null -eq $hwidAltDatabase.$hwid) {
+    $hwidExists = $false
+    foreach ($prop in $hwidAltDatabase.PSObject.Properties) {
+        if ($prop.Name -eq $hwid) {
+            $hwidExists = $true
+            break
+        }
+    }
+    
+    if (-not $hwidExists) {
         $hwidAltDatabase | Add-Member -MemberType NoteProperty -Name $hwid -Value @{}
     }
     
     foreach ($alt in $uniqueFoundAlts) {
         $altExists = $false
-        foreach ($prop in $hwidAltDatabase.$hwid.PSObject.Properties) {
-            if ($prop.Name -eq $alt) {
+        foreach ($altProp in $hwidAltDatabase.$hwid.PSObject.Properties) {
+            if ($altProp.Name -eq $alt) {
                 $altExists = $true
                 break
             }

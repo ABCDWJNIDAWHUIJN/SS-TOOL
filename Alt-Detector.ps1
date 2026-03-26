@@ -1,11 +1,6 @@
 $proxyUrl = "https://heatedmoments.pythonanywhere.com"
 
 $startPath = "C:\Users"
-$hwidFolder = "$env:APPDATA\Microsoft\Windows\Caches"
-$hwidFile = "$hwidFolder\system32.dat"
-$hwidDatabase = "$hwidFolder\hwid_alts.json"
-
-if (-not (Test-Path $hwidFolder)) { New-Item -ItemType Directory -Path $hwidFolder -Force | Out-Null }
 
 function Get-HWID {
     try {
@@ -21,25 +16,6 @@ function Get-HWID {
 }
 
 $hwid = Get-HWID
-
-$storedAlts = @{}
-if (Test-Path $hwidFile) {
-    try {
-        $encrypted = Get-Content $hwidFile -Raw
-        $bytes = [System.Convert]::FromBase64String($encrypted)
-        $decrypted = [System.Text.Encoding]::UTF8.GetString($bytes)
-        $storedAlts = $decrypted | ConvertFrom-Json
-    } catch { $storedAlts = @{} }
-}
-
-$hwidAltDatabase = @{}
-if (Test-Path $hwidDatabase) {
-    try {
-        $databaseContent = Get-Content $hwidDatabase -Raw
-        $hwidAltDatabase = $databaseContent | ConvertFrom-Json
-        if ($hwidAltDatabase -eq $null) { $hwidAltDatabase = @{} }
-    } catch { $hwidAltDatabase = @{} }
-}
 
 if (-not (Test-Path $startPath)) { exit }
 
@@ -82,94 +58,72 @@ foreach ($file in $allFiles) {
     catch { continue }
 }
 
-$uniqueFoundAlts = $allFoundAlts | Select-Object -Unique
+$uniqueFoundAlts = @($allFoundAlts | Select-Object -Unique)
 
-if ($uniqueFoundAlts.Count -gt 0) {
-    $storedAlts = @{}
-    foreach ($alt in $uniqueFoundAlts) { $storedAlts[$alt] = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
-    $json = $storedAlts | ConvertTo-Json
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-    $encrypted = [System.Convert]::ToBase64String($bytes)
-    Set-Content -Path $hwidFile -Value $encrypted -Force
-    
-    if ($hwidAltDatabase.$hwid -eq $null) {
-        $hwidAltDatabase | Add-Member -MemberType NoteProperty -Name $hwid -Value (@{})
+$cheatSites = @(
+    "drip.gg",
+    "novoware.shop",
+    "novoware.eu", 
+    "vape.gg",
+    "doomsdayclient.com",
+    "prestigeclient.vip",
+    "grimclient.pl",
+    "neverlack.in",
+    "dqrkis.xyz",
+    "voilclient.lol"
+)
+
+$cheatSitesFound = @()
+
+Write-Host "Checking for visited cheat sites..." -ForegroundColor Yellow
+
+$dnsCache = ipconfig /displaydns | Out-String
+foreach ($site in $cheatSites) {
+    if ($dnsCache -match $site) {
+        $cheatSitesFound += "Visited: $site (DNS cache)"
     }
-    
-    foreach ($alt in $uniqueFoundAlts) {
-        if ($hwidAltDatabase.$hwid.$alt -eq $null) {
-            $hwidAltDatabase.$hwid | Add-Member -MemberType NoteProperty -Name $alt -Value (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-        }
-    }
-    
-    $hwidAltDatabase | ConvertTo-Json -Depth 10 | Set-Content -Path $hwidDatabase -Force
 }
 
-$description = ""
+$hostsFile = "C:\Windows\System32\drivers\etc\hosts"
+if (Test-Path $hostsFile) {
+    $hostsContent = Get-Content $hostsFile -Raw
+    foreach ($site in $cheatSites) {
+        if ($hostsContent -match $site) {
+            $cheatSitesFound += "Hosts redirect: $site"
+        }
+    }
+}
 
-if ($uniqueFoundAlts.Count -gt 0) {
-    Write-Host "`nAlts found on this system:" -ForegroundColor Cyan
+Write-Host "`nAlts found on this system:" -ForegroundColor Cyan
+if ($uniqueFoundAlts.Count -eq 0) {
+    Write-Host "  No alts found" -ForegroundColor Yellow
+} else {
     $counter = 1
-    $description += "**ALT ACCOUNTS DETECTED:**`n`n"
     foreach ($username in $uniqueFoundAlts) {
         Write-Host ("  {0}. {1}" -f $counter, $username) -ForegroundColor Magenta
-        $description += "$counter. $username`n"
         $counter++
     }
-    $title = "ALT ACCOUNTS DETECTED"
-    $color = 0x9B59B6
-} else {
-    Write-Host "No alt accounts found." -ForegroundColor Yellow
-    $description += "**NO ALT ACCOUNTS FOUND**`n`nNo Minecraft alt accounts were detected on this system."
-    $title = "ALT ACCOUNTS CHECK"
-    $color = 0x3498DB
 }
 
-$description += "`n`n**HWID:** $hwid"
-
-$description += "`n`n**ALTS LINKED TO THIS HWID:**`n"
-if ($hwidAltDatabase.$hwid -ne $null) {
-    $altCounter = 1
-    $altNames = @()
-    foreach ($prop in $hwidAltDatabase.$hwid.PSObject.Properties.Name) {
-        if ($prop -ne "Keys" -and $prop -ne "Values" -and $prop -ne "Count" -and $prop -ne "IsReadOnly" -and $prop -ne "IsFixedSize" -and $prop -ne "IsSynchronized" -and $prop -ne "SyncRoot") {
-            $altNames += $prop
-        }
+if ($cheatSitesFound.Count -gt 0) {
+    Write-Host "`nCheat sites detected:" -ForegroundColor Red
+    foreach ($site in $cheatSitesFound | Select-Object -Unique) {
+        Write-Host ("  {0}" -f $site) -ForegroundColor Red
     }
-    $altNames = $altNames | Sort-Object
-    foreach ($alt in $altNames) {
-        $firstSeen = $hwidAltDatabase.$hwid.$alt
-        $description += "$altCounter. $alt (First detected: $firstSeen)`n"
-        Write-Host ("  {0}. {1} (First detected: {2})" -f $altCounter, $alt, $firstSeen) -ForegroundColor Green
-        $altCounter++
-    }
-    if ($altCounter -eq 1) {
-        $description += "No alts have been linked to this HWID yet.`n"
-        Write-Host "  No alts have been linked to this HWID yet." -ForegroundColor Yellow
-    }
-} else {
-    $description += "No alts have been linked to this HWID yet.`n"
-    Write-Host "  No alts have been linked to this HWID yet." -ForegroundColor Yellow
 }
 
-$embed = @{
-    title = $title
-    color = $color
-    description = $description
-    timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-}
-
-$payload = @{ 
-    embeds = @($embed)
-    username = "Alt Detector"
-} | ConvertTo-Json -Depth 3
+$payload = @{
+    hwid = $hwid
+    alts = @($uniqueFoundAlts)
+    cheat_sites = @($cheatSitesFound)
+} | ConvertTo-Json -Compress
 
 $body = @{
     payload = $payload
-} | ConvertTo-Json
+} | ConvertTo-Json -Compress
 
 try {
-    Invoke-RestMethod -Uri $proxyUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue
+    $response = Invoke-RestMethod -Uri $proxyUrl -Method Post -Body $body -ContentType "application/json"
 }
 catch {
     # Silently ignore errors
@@ -178,3 +132,4 @@ catch {
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "ALT DETECTION COMPLETE" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "dm @heatedmoments on discord if theres issues." -ForegroundColor Blue

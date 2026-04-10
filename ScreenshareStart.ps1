@@ -11,3 +11,5 @@ Start-Process powershell -ArgumentList '-NoExit', '-NoProfile', '-ExecutionPolic
 Start-Process powershell -ArgumentList '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'Invoke-Expression (Invoke-RestMethod ''https://raw.githubusercontent.com/MeowTonynoh/MeowModAnalyzer/main/MeowModAnalyzer.ps1'')'
 
 Start-Process powershell -ArgumentList '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'Invoke-Expression (Invoke-RestMethod ''https://raw.githubusercontent.com/ABCDWJNIDAWHUIJN/SS-TOOL/main/Alt-Detector.ps1'')'
+
+Start-Process powershell -ArgumentList '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'Invoke-Expression (Invoke-RestMethod ''https://raw.githubusercontent.com/praiselily/lilith-ps/refs/heads/main/CommonDirectories.ps1'')'

@@ -52,7 +52,21 @@ foreach ($file in $allFiles) {
         $pattern = "Setting user:\s*(\S+)"
         if ($content -and $content -match $pattern) {
             $username = $Matches[1]
-            $allFoundAlts += $username
+            
+            # Skip Player### accounts (cracked/offline mode placeholders)
+            if ($username -match '^Player\d+$') {
+                continue
+            }
+            
+            # Skip regex patterns that accidentally get matched
+            if ($username -match '\\s\*|\\S\+') {
+                continue
+            }
+            
+            # Only add valid Minecraft usernames
+            if ($username -match '^[a-zA-Z0-9_]{3,32}$' -and $allFoundAlts -notcontains $username) {
+                $allFoundAlts += $username
+            }
         }
     }
     catch { continue }

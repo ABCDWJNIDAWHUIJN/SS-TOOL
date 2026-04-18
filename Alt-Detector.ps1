@@ -94,7 +94,8 @@ $cheatSites = @(
     "grimclient.pl",
     "neverlack.in",
     "dqrkis.xyz",
-    "voilclient.lol"
+    "voilclient.lol",
+    "discord.gg/"
 )
 
 $cheatSitesFound = @()

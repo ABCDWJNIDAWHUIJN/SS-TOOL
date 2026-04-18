@@ -1,6 +1,16 @@
 $proxyUrl = "https://heatedmoments.pythonanywhere.com"
 
-$startPath = "C:\Users"
+# Only scan these Minecraft launcher log folders (NOT entire C:\Users)
+$minecraftPaths = @(
+    "$env:APPDATA\.minecraft\logs",
+    "$env:APPDATA\PrismLauncher\logs",
+    "$env:APPDATA\MultiMC\logs",
+    "$env:APPDATA\ATLauncher\logs",
+    "$env:APPDATA\PolyMC\logs",
+    "$env:APPDATA\GDLauncher\logs",
+    "$env:APPDATA\Lunar Client\logs",
+    "$env:USERPROFILE\.lunarclient\logs"
+)
 
 function Get-HWID {
     try {
@@ -17,63 +27,63 @@ function Get-HWID {
 
 $hwid = Get-HWID
 
-if (-not (Test-Path $startPath)) { exit }
-
 Write-Host "Finding usernames, It may take a few minutes..." -ForegroundColor Cyan
-
-$gzFiles = Get-ChildItem -Path $startPath -Recurse -Filter "*.gz" -File -Force -ErrorAction SilentlyContinue
-$logFiles = Get-ChildItem -Path $startPath -Recurse -Filter "*.log" -File -Force -ErrorAction SilentlyContinue
-$allFiles = @($gzFiles) + @($logFiles)
 
 $allFoundAlts = @()
 
-foreach ($file in $allFiles) {
-    try {
-        $content = $null
-        $isGz = $file.Extension -eq ".gz"
+foreach ($path in $minecraftPaths) {
+    if (Test-Path $path) {
+        $gzFiles = Get-ChildItem -Path $path -Recurse -Filter "*.gz" -File -Force -ErrorAction SilentlyContinue
+        $logFiles = Get-ChildItem -Path $path -Recurse -Filter "*.log" -File -Force -ErrorAction SilentlyContinue
+        $allFiles = @($gzFiles) + @($logFiles)
         
-        if ($isGz) {
-            $tempFileName = "$($file.BaseName)_temp_$([guid]::NewGuid().ToString('N')).txt"
-            $tempOutput = Join-Path $file.DirectoryName $tempFileName
-            
-            $inputStream = [System.IO.File]::OpenRead($file.FullName)
-            $outputStream = [System.IO.File]::Create($tempOutput)
-            $gzipStream = New-Object System.IO.Compression.GZipStream($inputStream, [System.IO.Compression.CompressionMode]::Decompress)
-            
-            $gzipStream.CopyTo($outputStream)
-            $gzipStream.Close(); $outputStream.Close(); $inputStream.Close()
-            
-            $content = Get-Content $tempOutput -Raw -ErrorAction SilentlyContinue
-            Remove-Item $tempOutput -Force -ErrorAction SilentlyContinue
-        } else {
-            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-        }
-        
-        $pattern = "Setting user:\s*(\S+)"
-        if ($content -and $content -match $pattern) {
-            $username = $Matches[1]
-            
-            # Skip Player### accounts (cracked/offline mode placeholders)
-            if ($username -match '^Player\d+$') {
-                continue
+        foreach ($file in $allFiles) {
+            try {
+                $content = $null
+                $isGz = $file.Extension -eq ".gz"
+                
+                if ($isGz) {
+                    $tempFileName = "$($file.BaseName)_temp_$([guid]::NewGuid().ToString('N')).txt"
+                    $tempOutput = Join-Path $file.DirectoryName $tempFileName
+                    
+                    $inputStream = [System.IO.File]::OpenRead($file.FullName)
+                    $outputStream = [System.IO.File]::Create($tempOutput)
+                    $gzipStream = New-Object System.IO.Compression.GZipStream($inputStream, [System.IO.Compression.CompressionMode]::Decompress)
+                    
+                    $gzipStream.CopyTo($outputStream)
+                    $gzipStream.Close(); $outputStream.Close(); $inputStream.Close()
+                    
+                    $content = Get-Content $tempOutput -Raw -ErrorAction SilentlyContinue
+                    Remove-Item $tempOutput -Force -ErrorAction SilentlyContinue
+                } else {
+                    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                }
+                
+                $pattern = "Setting user:\s*(\S+)"
+                if ($content -and $content -match $pattern) {
+                    $username = $Matches[1]
+                    
+                    if ($username -match '^Player\d+$') {
+                        continue
+                    }
+                    
+                    if ($username -match '\\s\*|\\S\+') {
+                        continue
+                    }
+                    
+                    if ($username -match '^[a-zA-Z0-9_]{3,32}$' -and $allFoundAlts -notcontains $username) {
+                        $allFoundAlts += $username
+                    }
+                }
             }
-            
-            # Skip regex patterns that accidentally get matched
-            if ($username -match '\\s\*|\\S\+') {
-                continue
-            }
-            
-            # Only add valid Minecraft usernames
-            if ($username -match '^[a-zA-Z0-9_]{3,32}$' -and $allFoundAlts -notcontains $username) {
-                $allFoundAlts += $username
-            }
+            catch { continue }
         }
     }
-    catch { continue }
 }
 
 $uniqueFoundAlts = @($allFoundAlts | Select-Object -Unique)
 
+# Cheat site detection (fast - no file scanning)
 $cheatSites = @(
     "drip.gg",
     "novoware.shop",
@@ -94,7 +104,7 @@ Write-Host "Checking for visited cheat sites..." -ForegroundColor Yellow
 $dnsCache = ipconfig /displaydns | Out-String
 foreach ($site in $cheatSites) {
     if ($dnsCache -match $site) {
-        $cheatSitesFound += "Visited: $site (DNS cache)"
+        $cheatSitesFound += "Visited: $site"
     }
 }
 

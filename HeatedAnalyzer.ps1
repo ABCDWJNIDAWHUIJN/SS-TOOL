@@ -86,6 +86,24 @@ function Get-ZoneIdentifier {
     return $null
 }
 
+function Get-FileDates {
+    param([string]$FilePath)
+    
+    $file = Get-Item $FilePath -ErrorAction SilentlyContinue
+    if ($file) {
+        return @{
+            Created = $file.CreationTime
+            Modified = $file.LastWriteTime
+            Accessed = $file.LastAccessTime
+        }
+    }
+    return @{
+        Created = "Unknown"
+        Modified = "Unknown"
+        Accessed = "Unknown"
+    }
+}
+
 function Get-SourceDescription {
     param([string]$ZoneUrl)
     
@@ -224,6 +242,7 @@ foreach ($file in $jarFiles) {
     Write-Host "`r [$spin] Verifying: $counter / $($jarFiles.Count) - $($file.Name)" -NoNewline -ForegroundColor Yellow
     
     $hash = Get-SHA1 -filePath $file.FullName
+    $fileDates = Get-FileDates -FilePath $file.FullName
     
     $modrinthData = Test-Modrinth -hash $hash
     if ($modrinthData) {
@@ -235,6 +254,8 @@ foreach ($file in $jarFiles) {
             SourceDesc = Get-SourceDescription -ZoneUrl (Get-ZoneIdentifier -filePath $file.FullName)
             FilePath = $file.FullName
             FileSize = [math]::Round($file.Length / 1KB, 2)
+            CreatedDate = $fileDates.Created
+            ModifiedDate = $fileDates.Modified
         }
         continue
     }
@@ -249,6 +270,8 @@ foreach ($file in $jarFiles) {
             SourceDesc = Get-SourceDescription -ZoneUrl (Get-ZoneIdentifier -filePath $file.FullName)
             FilePath = $file.FullName
             FileSize = [math]::Round($file.Length / 1KB, 2)
+            CreatedDate = $fileDates.Created
+            ModifiedDate = $fileDates.Modified
         }
         continue
     }
@@ -260,6 +283,8 @@ foreach ($file in $jarFiles) {
         RawSource = Get-ZoneIdentifier -filePath $file.FullName
         SourceDesc = Get-SourceDescription -ZoneUrl (Get-ZoneIdentifier -filePath $file.FullName)
         FileSize = [math]::Round($file.Length / 1KB, 2)
+        CreatedDate = $fileDates.Created
+        ModifiedDate = $fileDates.Modified
     }
 }
 
@@ -296,6 +321,8 @@ if ($SkipDeepScan) {
                 RawSource = $mod.RawSource
                 SourceDesc = $mod.SourceDesc
                 FileSize = $mod.FileSize
+                CreatedDate = $mod.CreatedDate
+                ModifiedDate = $mod.ModifiedDate
                 PatternsFound = $deepResult
                 PatternCount = $deepResult.Count
             }
@@ -327,6 +354,7 @@ if ($verifiedMods.Count -gt 0) {
         Write-Host "  $($mod.ModName)" -ForegroundColor White
         Write-Host "     File: $($mod.FileName)" -ForegroundColor Gray
         Write-Host "     Size: $($mod.FileSize) KB" -ForegroundColor DarkGray
+        Write-Host "     Downloaded: $($mod.CreatedDate)" -ForegroundColor DarkGray
         Write-Host "     Location: $($mod.FilePath)" -ForegroundColor DarkGray
         if ($mod.SourceDesc -and $mod.SourceDesc -ne "Unknown") {
             Write-Host "     Source: $($mod.SourceDesc)" -ForegroundColor Cyan
@@ -345,6 +373,7 @@ if ($cleanUnknownMods.Count -gt 0) {
     foreach ($mod in $cleanUnknownMods) {
         Write-Host "  $($mod.FileName)" -ForegroundColor Yellow
         Write-Host "     Size: $($mod.FileSize) KB" -ForegroundColor DarkGray
+        Write-Host "     Downloaded: $($mod.CreatedDate)" -ForegroundColor DarkGray
         Write-Host "     Location: $($mod.FilePath)" -ForegroundColor DarkGray
         if ($mod.SourceDesc -and $mod.SourceDesc -ne "Unknown") {
             Write-Host "     Source: $($mod.SourceDesc)" -ForegroundColor Cyan
@@ -367,6 +396,9 @@ if ($cheatMods.Count -gt 0) {
         Write-Host "  │" -ForegroundColor DarkRed
         Write-Host "  │  LOCATION:" -ForegroundColor Yellow
         Write-Host "  │     $($mod.FilePath)" -ForegroundColor Gray
+        Write-Host "  │" -ForegroundColor DarkRed
+        Write-Host "  │  DOWNLOADED:" -ForegroundColor Yellow
+        Write-Host "  │     $($mod.CreatedDate)" -ForegroundColor Gray
         Write-Host "  │" -ForegroundColor DarkRed
         Write-Host "  │  SIZE: $($mod.FileSize) KB" -ForegroundColor Gray
         Write-Host "  │  SHA1: $($mod.Hash)" -ForegroundColor Gray
@@ -412,9 +444,9 @@ if ($ExportJson) {
         ScanTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         ModPath = $inputPath
         TotalMods = $jarFiles.Count
-        VerifiedMods = $verifiedMods | Select-Object FileName, ModName, Hash, SourceDesc
-        UnknownMods = $cleanUnknownMods | Select-Object FileName, Hash, SourceDesc
-        CheatMods = $cheatMods | Select-Object FileName, FilePath, Hash, SourceDesc, PatternCount
+        VerifiedMods = $verifiedMods | Select-Object FileName, ModName, Hash, SourceDesc, CreatedDate
+        UnknownMods = $cleanUnknownMods | Select-Object FileName, Hash, SourceDesc, CreatedDate
+        CheatMods = $cheatMods | Select-Object FileName, FilePath, Hash, SourceDesc, CreatedDate, PatternCount
     }
     $jsonPath = "$env:USERPROFILE\Desktop\heated_scan_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
     $exportData | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath
